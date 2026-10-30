@@ -283,3 +283,5 @@ A cada pedido confirmado, a API executa `PUBLISH pedidos:confirmados <json do pe
 5. Reserva expirada: crie outra reserva e force a expiração com `docker compose exec redis redis-cli EXPIRE reserva:<reservaId> 1` (para não esperar 10 minutos); em seguida `POST /pedidos/confirmar` → **410**.
 6. `docker compose exec api python demo_limite.py` → 10 respostas 201 e a 11ª **429**.
 7. `GET /eventos/ranking`, `GET /relatorios/faturamento` e `GET /relatorios/ocupacao/{id}`.
+#   c p 6 - d a t a  
+ 
