@@ -1,0 +1,136 @@
+### TicketFlash API — coleção de requisições
+### Use com a extensão "REST Client" do VS Code (ou importe no Insomnia/Postman).
+### Execute na ordem: as requisições com "# @name" guardam ids usados nas seguintes.
+
+@api = http://localhost:8000
+
+### Status da API, MongoDB e Redis
+GET {{api}}/
+
+############################################################
+### EVENTOS — CRUD (Req. 2)
+############################################################
+
+### Listar todos os eventos
+# @name eventos
+GET {{api}}/eventos
+
+@eventoId = {{eventos.response.body.$[0].id}}
+
+### Listar com filtro por categoria
+GET {{api}}/eventos?categoria=show
+
+### Listar com filtro por categoria e cidade
+GET {{api}}/eventos?categoria=show&cidade=São Paulo
+
+### Criar evento (campos extras são aceitos: documento flexível)
+# @name novoEvento
+POST {{api}}/eventos
+Content-Type: application/json
+
+{
+  "nome": "Jazz ao Entardecer",
+  "categoria": "show",
+  "data": "2027-04-10T19:00:00",
+  "local": { "cidade": "Recife", "endereco": "Rua da Aurora, 100" },
+  "atracoes": ["Quarteto Maré Alta", "Sax Nordeste"],
+  "setores": [
+    { "nome": "Pista", "preco": 90, "capacidade": 200 },
+    { "nome": "Mesa", "preco": 250, "capacidade": 40 }
+  ],
+  "classificacaoEtaria": 12
+}
+
+@novoEventoId = {{novoEvento.response.body.id}}
+
+### Buscar por id — 1ª chamada: "origem": "banco" (Req. 5)
+GET {{api}}/eventos/{{eventoId}}
+
+### Buscar por id — 2ª chamada: "origem": "cache"
+GET {{api}}/eventos/{{eventoId}}
+
+### Atualizar evento — apaga evento:{id} do Redis (Req. 9)
+PUT {{api}}/eventos/{{eventoId}}
+Content-Type: application/json
+
+{
+  "nome": "Evento Atualizado — Sessão Extra"
+}
+
+### Buscar de novo: volta a ser "origem": "banco"
+GET {{api}}/eventos/{{eventoId}}
+
+### Remover evento — também apaga o cache (Req. 9)
+DELETE {{api}}/eventos/{{novoEventoId}}
+
+### Buscar evento removido → 404
+GET {{api}}/eventos/{{novoEventoId}}
+
+############################################################
+### RANKING (Req. 7)
+############################################################
+
+### Top 5 eventos mais vistos (Sorted Set)
+GET {{api}}/eventos/ranking
+
+############################################################
+### FLUXO DE COMPRA (Req. 6, 8 e 10)
+############################################################
+
+### Listar usuários (para pegar um usuarioId)
+# @name usuarios
+GET {{api}}/usuarios
+
+@usuarioId = {{usuarios.response.body.$[0].id}}
+@setor = {{eventos.response.body.$[0].setores[0].nome}}
+
+### Criar reserva (SET NX EX 600) — repita 11x em 1 minuto para ver o 429
+# @name reserva
+POST {{api}}/reservas
+Content-Type: application/json
+
+{
+  "usuarioId": "{{usuarioId}}",
+  "eventoId": "{{eventoId}}",
+  "setor": "{{setor}}",
+  "quantidade": 2
+}
+
+@reservaId = {{reserva.response.body.reservaId}}
+
+### Confirmar pedido (grava no MongoDB, $inc em vendidos, apaga reserva, publica no Pub/Sub)
+POST {{api}}/pedidos/confirmar
+Content-Type: application/json
+
+{
+  "reservaId": "{{reservaId}}"
+}
+
+### Confirmar a mesma reserva de novo → 410 Gone
+POST {{api}}/pedidos/confirmar
+Content-Type: application/json
+
+{
+  "reservaId": "{{reservaId}}"
+}
+
+### Confirmar reserva inexistente/expirada → 410 Gone
+POST {{api}}/pedidos/confirmar
+Content-Type: application/json
+
+{
+  "reservaId": "reserva-que-ja-expirou"
+}
+
+### Pedidos de um usuário (usa o índice pedidos.usuarioId)
+GET {{api}}/pedidos?usuarioId={{usuarioId}}
+
+############################################################
+### RELATÓRIOS — Aggregation Pipeline (Req. 4)
+############################################################
+
+### Faturamento por evento ($match, $group, $lookup, $unwind, $project, $sort)
+GET {{api}}/relatorios/faturamento
+
+### Ocupação por setor de um evento ($match, $unwind, $project, $sort)
+GET {{api}}/relatorios/ocupacao/{{eventoId}}
